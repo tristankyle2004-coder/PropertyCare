@@ -1,0 +1,529 @@
+<!-- public/index.html
+     Dashboard page for viewing maintenance requests.
+     Features:
+     - request list
+     - search
+     - status filter
+     - auth check
+     - stats summary
+-->
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PropertyCare Dashboard</title>
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/style.css" />
+
+  <style>
+    .stats-card {
+      position: relative;
+      display: flex;
+      min-height: 120px;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+      padding: 1.1rem 1.25rem;
+      background: #fff;
+      border: 1px solid #e5eaf1;
+      border-radius: 16px;
+      box-shadow: 0 4px 14px rgba(31, 45, 61, 0.06);
+    }
+
+    .stats-card::before {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 5px;
+      content: "";
+      background: var(--stats-color);
+    }
+
+    .stats-label {
+      color: #64748b;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .stats-value {
+      color: #172033;
+      font-size: 2rem;
+      font-weight: 750;
+      line-height: 1;
+    }
+
+    .stats-open {
+      --stats-color: #0d6efd;
+    }
+
+    .stats-assigned {
+      --stats-color: #0dcaf0;
+    }
+
+    .stats-progress {
+      --stats-color: #f0ad00;
+    }
+
+    .stats-completed {
+      --stats-color: #198754;
+    }
+
+    .request-card {
+      height: 100%;
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid #e5eaf1;
+      border-radius: 16px;
+      box-shadow: 0 4px 14px rgba(31, 45, 61, 0.08);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .request-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(31, 45, 61, 0.12);
+    }
+
+    .request-card-body {
+      padding: 1.25rem;
+    }
+
+    .request-photo,
+    .request-no-photo {
+      display: flex;
+      width: 100%;
+      height: 180px;
+      align-items: center;
+      justify-content: center;
+      object-fit: cover;
+      color: #64748b;
+      background: #f1f5f9;
+      border: 1px dashed #cbd5e1;
+      border-radius: 12px;
+    }
+
+    .request-info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin: 1rem 0;
+    }
+
+    .request-info-item {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 0.3rem;
+      padding: 0.85rem 1rem;
+      background: #f8fafc;
+      border: 1px solid #e5eaf1;
+      border-radius: 12px;
+    }
+
+    .request-info-label {
+      color: #64748b;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .request-info-value {
+      color: #1e293b;
+      overflow-wrap: anywhere;
+    }
+
+    .request-problem {
+      grid-column: 1 / -1;
+    }
+
+    .request-card-footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      padding: 0.85rem 1.25rem;
+      color: #64748b;
+      background: #f8fafc;
+      border-top: 1px solid #e5eaf1;
+      font-size: 0.875rem;
+    }
+
+    @media (max-width: 576px) {
+      .request-info-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .request-problem {
+        grid-column: auto;
+      }
+
+      .request-card-footer {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="/">PropertyCare</a>
+
+      <div class="d-flex align-items-center gap-2">
+        <a class="btn btn-outline-light" href="/new-request.html">New Request</a>
+        <button class="btn btn-light" id="logoutBtn" type="button">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-4">
+    <section class="mb-4">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+          <p class="text-uppercase small text-muted mb-1">Overview</p>
+          <h1 class="mb-0">Maintenance Requests</h1>
+        </div>
+      </div>
+    </section>
+
+    <section class="row g-3 mb-4" aria-label="Request summary">
+      <div class="col-6 col-lg-3">
+        <div class="stats-card stats-open">
+          <span class="stats-label">Open</span>
+          <span class="stats-value" id="openCount">0</span>
+        </div>
+      </div>
+
+      <div class="col-6 col-lg-3">
+        <div class="stats-card stats-assigned">
+          <span class="stats-label">Assigned</span>
+          <span class="stats-value" id="assignedCount">0</span>
+        </div>
+      </div>
+
+      <div class="col-6 col-lg-3">
+        <div class="stats-card stats-progress">
+          <span class="stats-label">In Progress</span>
+          <span class="stats-value" id="progressCount">0</span>
+        </div>
+      </div>
+
+      <div class="col-6 col-lg-3">
+        <div class="stats-card stats-completed">
+          <span class="stats-label">Completed</span>
+          <span class="stats-value" id="completedCount">0</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="filter-panel mb-4">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label for="statusFilter" class="form-label small text-muted">Status</label>
+          <select id="statusFilter" class="form-select">
+            <option value="">All status</option>
+            <option value="open">Open</option>
+            <option value="assigned">Assigned</option>
+            <option value="in_progress">In progress</option>
+            <option value="completed">Completed</option>
+            <option value="closed">Closed</option>
+          </select>
+        </div>
+
+        <div class="col-md-5">
+          <label for="search" class="form-label small text-muted">Search</label>
+          <input
+            id="search"
+            class="form-control"
+            placeholder="Search title or property..."
+          />
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label small text-muted" aria-hidden="true">&nbsp;</label>
+          <button id="apply" class="btn btn-primary w-100" type="button">Apply</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div id="list" class="row g-3"></div>
+    </section>
+  </main>
+
+  <script>
+    function requireAuth() {
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        window.location.href = "/login.html";
+        return false;
+      }
+
+      return true;
+    }
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return "";
+
+      return String(value).replace(/[&<>"']/g, character => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+      }[character]));
+    }
+
+    function priorityClass(priority) {
+      if (priority === "high") return "bg-danger";
+      if (priority === "medium") return "bg-warning text-dark";
+      return "bg-success";
+    }
+
+    function statusClass(status) {
+      if (status === "open") return "bg-primary";
+      if (status === "assigned") return "bg-info text-dark";
+      if (status === "in_progress") return "bg-warning text-dark";
+      if (status === "completed") return "bg-success";
+      return "bg-secondary";
+    }
+
+    async function updateStatusCounts() {
+      const headers = {
+        Authorization: "Bearer " + localStorage.getItem("token")
+      };
+
+      const firstResponse = await fetch(
+        "/api/requests?limit=50&page=1",
+        { headers }
+      );
+
+      if (!firstResponse.ok) return;
+
+      const firstPayload = await firstResponse.json();
+      const allRequests = Array.isArray(firstPayload.data)
+        ? [...firstPayload.data]
+        : Array.isArray(firstPayload)
+          ? [...firstPayload]
+          : [];
+
+      const totalPages = firstPayload.pagination?.pages || 1;
+
+      for (let page = 2; page <= totalPages; page++) {
+        const response = await fetch(
+          `/api/requests?limit=50&page=${page}`,
+          { headers }
+        );
+
+        if (!response.ok) continue;
+
+        const payload = await response.json();
+        if (Array.isArray(payload.data)) {
+          allRequests.push(...payload.data);
+        }
+      }
+
+      const counts = {
+        open: 0,
+        assigned: 0,
+        in_progress: 0,
+        completed: 0
+      };
+
+      allRequests.forEach(request => {
+        const status = request.status || "open";
+        if (Object.prototype.hasOwnProperty.call(counts, status)) {
+          counts[status]++;
+        }
+      });
+
+      document.getElementById("openCount").textContent = counts.open;
+      document.getElementById("assignedCount").textContent = counts.assigned;
+      document.getElementById("progressCount").textContent = counts.in_progress;
+      document.getElementById("completedCount").textContent = counts.completed;
+    }
+
+    async function loadRequests() {
+      if (!requireAuth()) return;
+
+      const list = document.getElementById("list");
+      list.innerHTML = "";
+
+      try {
+        await updateStatusCounts();
+
+        const selectedStatus = document.getElementById("statusFilter").value;
+        const query = document.getElementById("search").value.trim();
+
+        const params = new URLSearchParams();
+        if (selectedStatus) params.set("status", selectedStatus);
+        if (query) params.set("q", query);
+
+        const response = await fetch(
+          "/api/requests?" + params.toString(),
+          {
+            headers: {
+              Authorization: "Bearer " + localStorage.getItem("token")
+            }
+          }
+        );
+
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({
+            error: "Failed to load requests"
+          }));
+          throw new Error(error.error || "Failed to load requests");
+        }
+
+        const payload = await response.json();
+        const requests = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload.data)
+            ? payload.data
+            : [];
+
+        // In the unfiltered view, show only active requests.
+        // Completed and closed requests remain available via their filters.
+        const visibleRequests = selectedStatus
+          ? requests
+          : requests.filter(request => {
+              const status = request.status || "open";
+              return status !== "completed" && status !== "closed";
+            });
+
+        visibleRequests.forEach(request => {
+          const card = document.createElement("div");
+          card.className = "col-lg-6";
+
+          const property = request.Property || request.property || {};
+          const tenant = request.tenant || {};
+          const worker = request.worker || {};
+          const photos = request.Photos || request.photos || [];
+          const firstPhoto = photos.length ? photos[0].imageUrl : "";
+          const createdAt = request.createdAt || request.created_at;
+          const parsedDate = createdAt ? new Date(createdAt) : null;
+
+          const createdDate =
+            parsedDate && !Number.isNaN(parsedDate.getTime())
+              ? new Intl.DateTimeFormat(undefined, {
+                  dateStyle: "medium"
+                }).format(parsedDate)
+              : "Date unavailable";
+
+          const status = request.status || "open";
+
+          const imageMarkup = firstPhoto
+            ? `
+              <img
+                src="${escapeHtml(firstPhoto)}"
+                class="request-photo mb-3"
+                alt="Photo for ${escapeHtml(request.title || "maintenance request")}"
+              >
+            `
+            : `
+              <div class="request-no-photo mb-3">No photo uploaded</div>
+            `;
+
+          card.innerHTML = `
+            <article class="request-card h-100">
+              <div class="request-card-body">
+                ${imageMarkup}
+
+                <div class="d-flex justify-content-between align-items-start gap-2">
+                  <h2 class="h5 mb-0">
+                    ${escapeHtml(request.title || "Maintenance request")}
+                  </h2>
+
+                  <div class="d-flex flex-wrap justify-content-end gap-2">
+                    <span class="badge ${statusClass(status)}">
+                      ${escapeHtml(status.replaceAll("_", " "))}
+                    </span>
+                    <span class="badge ${priorityClass(request.priority)}">
+                      ${escapeHtml(request.priority || "low")}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="request-info-grid">
+                  <div class="request-info-item">
+                    <span class="request-info-label">Property</span>
+                    <span class="request-info-value">
+                      ${escapeHtml(property.name || "Unknown property")}
+                    </span>
+                  </div>
+
+                  <div class="request-info-item">
+                    <span class="request-info-label">Category</span>
+                    <span class="request-info-value">
+                      ${escapeHtml(request.category || "Not specified")}
+                    </span>
+                  </div>
+
+                  <div class="request-info-item request-problem">
+                    <span class="request-info-label">Problem</span>
+                    <span class="request-info-value">
+                      ${escapeHtml(request.description || "No description provided.")}
+                    </span>
+                  </div>
+                </div>
+
+                <a
+                  href="/view.html?id=${encodeURIComponent(request.id)}"
+                  class="btn btn-primary px-4"
+                >
+                  View
+                </a>
+              </div>
+
+              <footer class="request-card-footer">
+                <span>Tenant: ${escapeHtml(tenant.name || "—")}</span>
+                <span>Worker: ${escapeHtml(worker.name || "—")}</span>
+                <span>Created: ${escapeHtml(createdDate)}</span>
+              </footer>
+            </article>
+          `;
+
+          list.appendChild(card);
+        });
+
+        if (!visibleRequests.length) {
+          list.innerHTML = `
+            <div class="col-12">
+              <div class="alert alert-light border text-center">
+                No maintenance requests to show.
+              </div>
+            </div>
+          `;
+        }
+      } catch (error) {
+        list.innerHTML = `
+          <div class="col-12">
+            <div class="alert alert-danger">
+              ${escapeHtml(error.message || "Failed to load requests")}
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    document.getElementById("apply").addEventListener("click", loadRequests);
+    document.getElementById("statusFilter").addEventListener("change", loadRequests);
+
+    document.getElementById("search").addEventListener("keydown", event => {
+      if (event.key === "Enter") loadRequests();
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click", () => {
+      localStorage.removeItem("token");
+      window.location.href = "/login.html";
+    });
+
+    window.addEventListener("load", loadRequests);
+  </script>
+</body>
+</html>

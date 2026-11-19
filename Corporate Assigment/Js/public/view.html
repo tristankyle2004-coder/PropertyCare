@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Maintenance Request Details | PropertyCare</title>
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/style.css" />
+
+  <style>
+    .details-heading {
+      margin-bottom: 1.5rem;
+    }
+
+    .details-eyebrow {
+      color: #64748b;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+    }
+
+    .details-card {
+      overflow: hidden;
+      background: #fff;
+      border: 1px solid #e5eaf1;
+      border-radius: 20px;
+      box-shadow: 0 8px 26px rgba(31, 45, 61, 0.08);
+    }
+
+    .details-card-header {
+      padding: 1.5rem;
+      background: linear-gradient(135deg, #f8fafc, #eef4ff);
+      border-bottom: 1px solid #e5eaf1;
+    }
+
+    .details-card-body {
+      padding: 1.5rem;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .detail-item {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      gap: 0.35rem;
+      padding: 1rem;
+      background: #f8fafc;
+      border: 1px solid #e5eaf1;
+      border-radius: 14px;
+    }
+
+    .detail-label {
+      color: #64748b;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .detail-value {
+      color: #1e293b;
+      font-weight: 600;
+      overflow-wrap: anywhere;
+    }
+
+    .problem-panel {
+      margin-top: 1rem;
+      padding: 1.25rem;
+      background: #fffaf0;
+      border: 1px solid #f5dfad;
+      border-radius: 14px;
+    }
+
+    .problem-text {
+      margin: 0.5rem 0 0;
+      color: #334155;
+      line-height: 1.7;
+      white-space: pre-line;
+    }
+
+    .photos-section {
+      margin-top: 1.5rem;
+    }
+
+    .request-photo {
+      width: 100%;
+      max-height: 320px;
+      object-fit: cover;
+      border: 1px solid #e5eaf1;
+      border-radius: 14px;
+    }
+
+    .no-photos {
+      padding: 1.5rem;
+      color: #64748b;
+      text-align: center;
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
+      border-radius: 14px;
+    }
+
+    @media (max-width: 576px) {
+      .detail-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .details-card-header,
+      .details-card-body {
+        padding: 1.1rem;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-light">
+  <nav class="navbar navbar-dark bg-primary">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="/">PropertyCare</a>
+      <a class="btn btn-outline-light" href="/index.html">Back to dashboard</a>
+    </div>
+  </nav>
+
+  <main class="container py-4">
+    <header class="details-heading">
+      <p class="details-eyebrow mb-1">PROPERTYCARE · MAINTENANCE</p>
+      <h1 class="h2 mb-0">Maintenance Request Details</h1>
+    </header>
+
+    <div id="requestDetail">
+      <div class="alert alert-info">Loading request details…</div>
+    </div>
+  </main>
+
+  <script>
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return "";
+
+      return String(value).replace(/[&<>"']/g, character => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+      }[character]));
+    }
+
+    function getPriorityClass(priority) {
+      if (priority === "high") return "bg-danger";
+      if (priority === "medium") return "bg-warning text-dark";
+      return "bg-success";
+    }
+
+    function getStatusClass(status) {
+      const classes = {
+        open: "bg-primary",
+        assigned: "bg-info text-dark",
+        in_progress: "bg-warning text-dark",
+        completed: "bg-success",
+        closed: "bg-secondary"
+      };
+
+      return classes[status] || "bg-secondary";
+    }
+
+    function formatLabel(value) {
+      return String(value || "")
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, character => character.toUpperCase());
+    }
+
+    function formatDate(value) {
+      if (!value) return "Date unavailable";
+
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "Date unavailable";
+
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: "long",
+        timeStyle: "short"
+      }).format(date);
+    }
+
+    async function loadRequest() {
+      const token = localStorage.getItem("token");
+      const container = document.getElementById("requestDetail");
+
+      if (!token) {
+        window.location.href = "/login.html";
+        return;
+      }
+
+      const requestId = new URLSearchParams(window.location.search).get("id");
+
+      if (!requestId) {
+        container.innerHTML =
+          '<div class="alert alert-danger">No request ID was provided.</div>';
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/requests/${encodeURIComponent(requestId)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          }
+        );
+
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(payload.error || "Could not load this request.");
+        }
+
+        const request = payload.data || payload;
+        const property = request.Property || request.property || {};
+        const tenant = request.tenant || {};
+        const worker = request.worker || {};
+        const photos = request.Photos || request.photos || [];
+        const status = request.status || "open";
+        const priority = request.priority || "medium";
+        const createdAt = request.createdAt || request.created_at;
+
+        const photoMarkup = photos.length
+          ? photos.map(photo => {
+              const imageUrl = String(photo.imageUrl || "");
+
+              if (!imageUrl.startsWith("/uploads/")) return "";
+
+              return `
+                <div class="col-sm-6 col-lg-4">
+                  <img
+                    src="${escapeHtml(imageUrl)}"
+                    class="request-photo"
+                    alt="Photo attached to this maintenance request"
+                  />
+                </div>
+              `;
+            }).join("")
+          : `
+            <div class="no-photos">
+              No photos were uploaded with this request.
+            </div>
+          `;
+
+        container.innerHTML = `
+          <article class="details-card">
+            <header class="details-card-header">
+              <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                <div>
+                  <p class="details-eyebrow mb-2">REQUEST #${escapeHtml(request.id)}</p>
+                  <h2 class="h3 mb-0">${escapeHtml(request.title || "Maintenance request")}</h2>
+                </div>
+
+                <div class="d-flex flex-wrap gap-2">
+                  <span class="badge ${getStatusClass(status)}">
+                    ${escapeHtml(formatLabel(status))}
+                  </span>
+                  <span class="badge ${getPriorityClass(priority)}">
+                    ${escapeHtml(formatLabel(priority))} priority
+                  </span>
+                </div>
+              </div>
+            </header>
+
+            <div class="details-card-body">
+              <section aria-label="Request information">
+                <div class="detail-grid">
+                  <div class="detail-item">
+                    <span class="detail-label">Property</span>
+                    <span class="detail-value">
+                      ${escapeHtml(property.name || "Unknown property")}
+                    </span>
+                  </div>
+
+                  <div class="detail-item">
+                    <span class="detail-label">Category</span>
+                    <span class="detail-value">
+                      ${escapeHtml(request.category || "Not specified")}
+                    </span>
+                  </div>
+
+                  <div class="detail-item">
+                    <span class="detail-label">Tenant</span>
+                    <span class="detail-value">
+                      ${escapeHtml(tenant.name || "—")}
+                    </span>
+                  </div>
+
+                  <div class="detail-item">
+                    <span class="detail-label">Assigned worker</span>
+                    <span class="detail-value">
+                      ${escapeHtml(worker.name || "Not assigned")}
+                    </span>
+                  </div>
+
+                  <div class="detail-item">
+                    <span class="detail-label">Submitted</span>
+                    <span class="detail-value">
+                      ${escapeHtml(formatDate(createdAt))}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="problem-panel">
+                  <span class="detail-label">Problem description</span>
+                  <p class="problem-text">
+                    ${escapeHtml(request.description || "No description provided.")}
+                  </p>
+                </div>
+              </section>
+
+              <section class="photos-section" aria-label="Request photos">
+                <h3 class="h5 mb-3">Photos</h3>
+                ${
+                  photos.length
+                    ? `<div class="row g-3">${photoMarkup}</div>`
+                    : photoMarkup
+                }
+              </section>
+
+              <div class="d-flex flex-wrap gap-2 mt-4">
+                <a href="/index.html" class="btn btn-outline-primary">
+                  Back to maintenance requests
+                </a>
+
+                ${
+                  status !== "completed" && status !== "closed"
+                    ? `
+                      <button type="button" id="completeRequestBtn" class="btn btn-success">
+                        Complete
+                      </button>
+                    `
+                    : ""
+                }
+              </div>
+            </div>
+          </article>
+        `;
+
+        const completeButton = document.getElementById("completeRequestBtn");
+
+        completeButton?.addEventListener("click", async () => {
+          completeButton.disabled = true;
+          completeButton.textContent = "Completing…";
+
+          try {
+            const response = await fetch(
+              `/api/requests/${encodeURIComponent(request.id)}/status`,
+              {
+                method: "PATCH",
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ status: "completed" })
+              }
+            );
+
+            const result = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+              throw new Error(result.error || "Could not complete the request.");
+            }
+
+            window.location.href = "/index.html";
+          } catch (error) {
+            alert(error.message || "Could not complete the request.");
+            completeButton.disabled = false;
+            completeButton.textContent = "Complete";
+          }
+        });
+      } catch (error) {
+        container.innerHTML = `
+          <div class="alert alert-danger">
+            ${escapeHtml(error.message || "Unable to load request details.")}
+          </div>
+        `;
+      }
+    }
+
+    window.addEventListener("load", loadRequest);
+  </script>
+</body>
+</html>
